@@ -2,13 +2,15 @@ import 'dotenv/config';
 import { FunctionTool, LlmAgent, SequentialAgent } from '@google/adk';
 import { z } from 'zod';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const reactArchitect = new LlmAgent({
     name: "ReactArchitect",
     model: GEMINI_MODEL,
-    instruction: `You are a Senior React Architect. Given a feature request, define the component hierarchy.
-  Specify which components should be functional, what state resides where (using Hooks), and the prop signatures.
-  Output the architecture plan in a clear markdown format.`,
+    instruction: `You are a Senior React Architect. Given the following feature request: {input}
+    
+    Define the component hierarchy.
+    Specify which components should be functional, what state resides where (using Hooks), and the prop signatures.
+    Output the architecture plan in a clear markdown format.`,
     outputKey: "component_architecture"
 });
 
