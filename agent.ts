@@ -1,55 +1,47 @@
 import 'dotenv/config';
-import { FunctionTool, LlmAgent, SequentialAgent } from '@google/adk';
+import fs from 'fs';
+import { FunctionTool, LlmAgent, loadSkillFromDir, SequentialAgent, SkillToolset } from '@google/adk';
 import { z } from 'zod';
+import * as path from 'node:path';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const reactArchitect = new LlmAgent({
-    name: "ReactArchitect",
+const GEMINI_MODEL = 'gemini-3.5-flash';
+const mySkill = await loadSkillFromDir(path.join(process.cwd(), 'skills', 'my-skill'));
+const mySkillToolset = new SkillToolset([mySkill]);
+const instructionContent = fs.readFileSync(
+    path.join(process.cwd(), 'prompts', 'lifting-system-reviewer.md'),
+    'utf-8'
+);
+const readFileTool = new FunctionTool({
+    name: "readFile",
+    description: "Reads the content of a file.",
+    parameters: z.object({
+        filePath: z.string().describe("The path to the file to read")
+    }),
+    execute: async (args: { filePath: string }) => {
+        if (!fs.existsSync(args.filePath)) {
+            return `File not found: ${args.filePath}`;
+        }
+        return fs.readFileSync(args.filePath, 'utf-8');
+    }
+} as any);
+
+const editFileTool = new FunctionTool({
+    name: "editFile",
+    description: "Overwrites the specified file with new content.",
+    parameters: z.object({
+        filePath: z.string().describe("The path to the file to edit"),
+        newContent: z.string().describe("The new content to write into the file")
+    }),
+    execute: async (args: { filePath: string, newContent: string }) => {
+        fs.writeFileSync(args.filePath, args.newContent, 'utf-8');
+        return `Successfully updated ${args.filePath}`;
+    }
+} as any);
+
+export const fileEditingAgent = new LlmAgent({
+    name: "LiftingSystemReviewer",
     model: GEMINI_MODEL,
-    instruction: `You are a Senior React Architect. Given the following feature request: {input}
-    
-    Define the component hierarchy.
-    Specify which components should be functional, what state resides where (using Hooks), and the prop signatures.
-    Output the architecture plan in a clear markdown format.`,
-    outputKey: "component_architecture"
-});
-
-const componentEngineer = new LlmAgent({
-    name: "ComponentEngineer",
-    model: GEMINI_MODEL,
-    instruction: `You are a Lead React Developer. Implement the following architecture:
-  {component_architecture}
-  
-  Guidelines:
-  - Use TypeScript for type safety.
-  - Use Tailwind CSS for styling.
-  - Follow modern React (v18+) best practices (memo, useCallbacks where necessary).
-  - Output ONLY the code blocks.`,
-    outputKey: "generated_react_code"
-});
-
-const reactQA = new LlmAgent({
-    name: "ReactQA",
-    model: GEMINI_MODEL,
-    instruction: `You are a React Performance Expert. Review the following code:
-  {generated_react_code}
-  
-  Check for:
-  1. Missing useEffect dependency arrays.
-  2. Potential memory leaks.
-  3. Proper accessibility (ARIA labels).
-  4. Optimization opportunities.
-  
-  Provide a final, refactored version of the code that is production-ready.`,
-    outputKey: "final_react_app"
-});
-
-export const reactExpertAgent = new SequentialAgent({
-    name: "ReactExpertPipeline",
-    description: "A professional pipeline for generating high-quality React components.",
-    subAgents: [
-        reactArchitect,
-        componentEngineer,
-        reactQA
-    ]
+    instruction: instructionContent,
+    tools: [readFileTool, editFileTool, mySkillToolset],
+    outputKey: "lifting_system_review_result"
 });
